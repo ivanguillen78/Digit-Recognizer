@@ -1,0 +1,466 @@
+---
+title: "CPTR330 -- Final Project -- Format"
+author: Ivan Guillen & Nicholas Zimmerman
+date: June 6, 2021
+course: CPTR330
+output: 
+  pdf_document:
+    number_section: false
+---
+
+```{r setup,echo=FALSE,message=FALSE}
+library(formatR)
+knitr::opts_chunk$set(tidy.opts = list(width.cutoff = 80), tidy = TRUE)
+```
+
+```{r}
+library(caret)
+```
+
+# Final Project -- Kaggle Challenge 
+
+```{note,eval=FALSE,echo=FALSE}
+Homework Notes: Describe the problem and your overall approach.
+```
+
+This project attempts the Kaggle challenge Digit Recognizer (https://www.kaggle.com/c/digit-recognizer).
+Digit Recognizer is a computer vision problem.
+Digits 0-9 are provided as handwritten gray-scale 28x28 pixel images and need to be correctly identified by the machine learning algorithm. 
+We will apply KNN, decision tree, and SVM algorithms which are well-established approaches for solving this computer vision task. 
+An ensemble will then combine at least two of the algorithms to produce the best possible algorithm. 
+It is expected that data preparation be difficult because features are not explicitly identified in the dataset. 
+Additional research will need to be done to find methods to extract features to be used by the algorithms.
+
+## Data Preparation
+
+### Step 1 - Collect Data
+
+```{note,eval=FALSE,echo=FALSE}
+Homework Notes: Give an overview of the data and its source.
+```
+
+For this analysis, we will utilize a dataset of handwritten images sourced from MNIST ("Modified National Institute of Standards and Technology") and provided through the Kaggle.com Digit Recognizer challenge. The training set contains 42000 examples and the test set contains 28000 examples. Features are not provided and must be extracted from the 28x28 pixel gray-scale data for each image.
+
+### Step 2 - Exploring And Preparing The Data
+
+```{note,eval=FALSE,echo=FALSE}
+Homework Notes: Explain the data features and any transformations.
+```
+
+First, we will read in both the training and testing sets provided by Kaggle. 
+
+```{r}
+train <- read.csv('train.csv')
+test <- read.csv('test.csv')
+```
+
+Although using the `str` function on the data would result in a very long output, we can see the first few rows and columns to get a general idea. 
+
+```{r}
+train[1:5,1:2]
+```
+
+We know that we have 42000 examples in the training data. Additionally, we know (from the Kaggle data overview) that the training set has 785 variables. The first variable, `label`, is the target value. Based on the remaining 784 variables per row, each representing a single pixel, the goal is to predict this target value. The testing set does not contain this first target value, as it is our goal to create a model that predicts this value. 
+
+Next, we can see what types of variables we are dealing with.
+
+```{r}
+str(train$label)
+str(train$pixel0)
+```
+Using the `str` function, we can see that all variables are integer values (The second row is representative of all 784 pixels, as they are the same type of variable).
+
+We will need to convert the target values into factor variables, which is required by the algorithms we will be using. 
+
+```{r}
+train$label <- as.factor(train$label)
+str(train$label)
+```
+
+Next, we can begin to visualize the target value using a bar plot (`barplot`). 
+
+```{r}
+barplot(table(train[,1]), col = "black", main = "Count of Digits in Training Set")
+```
+
+Using the bar plot, we can observe that the most common label is 1, and the least common is 5. All labels seem to have about 4000 observations. 
+
+Next, we can actually convert each row into a 28x28 matrix to further visualize the target variable. We can do this by first creating a copy of the training data without the labels. Then, we use the `matrix` function on each row in this new copy using the `lapply` function. Finally, we will print out an example of a matrix.
+
+As we can see, creating this 28x28 pixel matrix allows us to see the general shape of the number 4, which is the fourth row in the training set.
+
+Finally, we can actually produce images of the data by creating a scaled copy of the training data and producing a 10x12 matrix of examples for each label (0-9).
+
+# ```{r}
+# var <- t(train[,-1])
+# row_matrices <- lapply(1:42000, function(x) matrix(var[,x], nrow = 28))
+# 
+# #Used to plot image. Commented out for formatting. Will attach image to pdf.
+# par(mfrow = c(1,1))
+# t(row_matrices[[4]])
+# ```
+
+Commented out to help with knitting. Will attach image to pdf. 
+
+# ```{r}
+# pixels.train <- train[,-1]/255
+# 
+# train.scaled <- cbind('label' = train$label, pixels.train)
+# 
+# par(mfrow=c(10, 12), pty='s', mai=c(0.2, 0, 0, 0.1))
+# 
+# for (lab in 0:9) {
+#   samp <- train.scaled %>%
+#     filter(label == lab)
+#   for (i in 1:12) {
+#     img <- matrix(as.numeric(samp[i, -1]), 28, 28, byrow = TRUE)
+#     image(t(img)[,28:1], axes = FALSE, col = grey(seq(1, 0, length = 256)))
+#     box(lty = 'solid')
+#   }
+# }
+# ```
+
+From these images, we can clearly see the differences even between the same label. For example, in the 1 row, some of the images are slanted. Some images are neat, while some are a bit messier. Some images have thin handwriting, while others have thicker handwriting. This will almost certainly have some effect on the overall accuracy of the models we create. However, we can also see that, for the most part, the digits are relatively centered. This will be a great help. 
+
+## First Algorithm
+
+```{note,eval=FALSE,echo=FALSE}
+Homework Notes: Detail the algorithm and why you chose it.
+```
+
+First, we will use k-Nearest Neighbors.
+
+The k Nearest-Neighbor algorithm is a machine learning classification algorithm. 
+The algorithm itself requires three things: an existing data set, a distance metric (which can potentially different for different types of data) and a value k, which determines how many neighbors to look at when classifying unknown records. 
+It is classified as a lazy learner, which means that it does not explicitly build a classification model. 
+The algorithm classifies an unknown record by computing the distance from the unknown record to k nearest known records. 
+It then (usually) takes a majority vote using the class labels from those nearest neighbors and classifies the unknown record. 
+Some advantages of kNN are that it is relatively simple to use and understand. 
+It also has a fast training phase. 
+However, some disadvantages are that (as stated above) it does not produce a model and that it requires a careful and appropriate selection of a k value.
+Additionally, if some features (data set variables) have a much larger range of values in comparison to other features, distance measurements will be dominated by the features with larger ranges. 
+
+We decided to begin with kNN because of its simplicity. 
+Our training data only contains numerical data and a factor target variable, which kNN should have no trouble processing. 
+If anything, the creation of the kNN model will take quite a while, simply due to the sheer number of both examples and predictor variables. 
+While kNN typically works best with scaled values, we will omit this step to begin with, as most of the columns contain similar ranges of numeric data. 
+
+First, we will create a smaller training dataset to directly see accuracy values here in RStudio.
+This smaller dataset will contain 5000 examples, which will further be divided into a training set (4000 examples) and a testing set (1000 values). 
+We will then create run the kNN algorithm on this small training set and predict the values in the small testing set. 
+Following this, we will run the kNN algorithm on the entire training data, split using the same train to test ratio used in the Kaggle Challenge. 
+
+### Step 3 - Training A Model On The Data
+
+```{note,eval=FALSE,echo=FALSE}
+Homework Notes: Explain how to train the model.
+```
+
+First, we will create the training and testing data needed for each model. 
+
+```{r}
+# Set random seed
+set.seed(330)
+
+# Get 5000 random indices from the entire training set
+small.test.train.indices <- sample(nrow(train), 5000, replace = FALSE)
+
+# Split into training and testing for small dataset
+small_train <- train[small.test.train.indices[1:4000],]
+small_test <- train[small.test.train.indices[4001:5000],]
+
+# Split into training and testing using entire dataset
+fullSplit_train <- train[1:25200,]
+fullSplit_test <- train[25201:42000,]
+```
+
+Next, we will run the `knn` function from the `FNN` library on our two sets of training and testing data. We will begin with an experimental k-value of 5. The reason for using FNN (Fast KNN) is because of the large number of predictor variables. We are able to more efficiently process the data with very little difference in accuracy. 
+
+```{r}
+library(class)
+library(FNN)
+
+knn.pred <- FNN::knn(small_train[,-1], small_test[,-1], cl = small_train$label, k=5)
+knn.full.pred <- FNN::knn(fullSplit_train[,-1], fullSplit_test[,-1], cl = fullSplit_train$label, k=5)
+```
+
+### Step 4 - Evaluating Model Performance
+
+```{note,eval=FALSE,echo=FALSE}
+Homework Notes: Explain the model's performance. Highlight key results.
+```
+
+Now, using the factor vectors produced by the KNN function, we can view how accurate our predictions are using confusion matrices. 
+
+```{r}
+confusionMatrix(knn.pred, small_test$label)
+```
+
+From the confusion matrix above, we can observe that the predictions of our small test were fairly accurate. We achieved an accuracy of 92.7 by simply running the FNN function on our unmodified data. From the matrix itself, the label that was misclassified the most times was the number 8. It was misclassified as a 3 seven times. This is reasonable, as the two digits have a similar form. Next, we can create a confusion matrix for our large data test. 
+
+```{r}
+confusionMatrix(knn.full.pred, fullSplit_test$label)
+```
+Our knn predictions were even more accurate this time! We achieved an accuracy of 96.36, using the same FNN parameters from the small test. It stands to reason that the FNN predictions for the entire testing data might be even more accurate, or at least the same. This time, it seems that 4 was the most misclassified digit. It was misclassified as a 9 thirty-eight times. 
+
+### Step 5 - Improving Model Performance
+
+```{note,eval=FALSE,echo=FALSE}
+Homework Notes: What options can be used to improve the model? Explain and show.
+```
+
+Our initial plan to identify potentially better k-values was to use the `knnEval` function from the `chemometrics` in order to see CV error for a variety of k-values. However, when dealing with large datasets as we are now, it is difficult to produce a useful graph. As a rule of thumb, the optimal value of k is typically found by taking the square root of the total number of rows. We can try this method and see if it produces better results. 
+
+```{r}
+small.k <- ceiling(sqrt(5000))
+large.k <- ceiling(sqrt(42000))
+```
+
+We can pass in these values for the k parameter. 
+
+```{r}
+knn.pred.k <- FNN::knn(small_train[,-1], small_test[,-1], cl = small_train$label, k=small.k)
+knn.full.pred.k <- FNN::knn(fullSplit_train[,-1], fullSplit_test[,-1], 
+                            cl = fullSplit_train$label, k=large.k)
+```
+
+Let's try printing out our results again using confusion matrices. 
+
+```{r}
+confusionMatrix(knn.pred.k, small_test$label)
+```
+
+```{r}
+confusionMatrix(knn.full.pred.k, fullSplit_test$label)
+```
+Unfortunately, our predictions using the rule of thumb method from the textbook were not as accurate as our initial predictions. We got an accuracy of 84.2 for the small test and 90.03 for the large test. Still, it seems that our larger dataset was affected less by the change in k-value. 
+
+The book suggests that as the size of a dataset increases, the value of k becomes less important. Keeping this in mind, we would like to try one more k-value (3). If the statement from the book is true, then decreasing the value for k should not significantly alter the accuracy for the larger dataset. Let's test this. 
+
+```{r}
+knn.pred.3 <- FNN::knn(small_train[,-1], small_test[,-1], cl = small_train$label, k=3)
+knn.full.pred.3 <- FNN::knn(fullSplit_train[,-1], fullSplit_test[,-1], cl = fullSplit_train$label, k=3)
+```
+
+Finally, let's print out the accuracies one final time.
+
+```{r}
+confusionMatrix(knn.pred.3, small_test$label)
+```
+
+```{r}
+confusionMatrix(knn.full.pred.3, fullSplit_test$label)
+```
+
+Using a slightly lower k-value did not alter the initial predictions significantly. We achieved very similar accuracies (92.3 and 96.35) for the small and large data. If anything, the accuracy of both decreased by a minuscule amount. Therefore, we will be utilizing a k value of 5 when we run the FNN function on the entire testing data. 
+
+## Second Algorithm
+
+```{note,eval=FALSE,echo=FALSE}
+Homework Notes: Detail the algorithm and why you chose it.
+```
+
+Decision trees are classifier models "that utilize a tree structure to model the relationships among the features and the potential outcomes" (Lantz 126). The tree itself is made up of a root node (the beginning of the model), decision nodes (typically Boolean tests), branches (which indicate potential outcomes of a decision), and leaf nodes (which indicate that a classification can be made). They are built using a divide and conquer tactic, in which data is recursively split into smaller subsets until the data in each subset is homogeneous. Decision trees themselves can be classified as greedy learners, because they "use data on a first-come, first-served basis" (Lantz 156). Decision trees also have the potential to overfit data by becoming very large and complex. As such, decision trees can be pruned (reduced in size and complexity such that the model is a better predictor of unseen data).
+
+### Step 3 - Training A Model On The Data
+
+```{note,eval=FALSE,echo=FALSE}
+Homework Notes: Explain how to train the model.
+```
+
+To train our decision tree models, we will use the `C5.0` function from the `C50` package. While we might typically produce a summary of the model, we will refrain from doing so in this case (simply due to the large number of predictors and length of summary). We will once again use the same small and large datasets we created above. As a reminder, the small dataset holds 5000 examples, with 4000 going to training and 1000 going to testing. The large dataset holds all 42000 examples, with 25200 going to training and 16800 going to testing. This is the same ratio as the entire training (42000) and entire testing (28000). 
+
+```{r}
+library(C50)
+
+small.tree.model <- C5.0(small_train[,-1], small_train[,1])
+large.tree.model <- C5.0(fullSplit_train[,-1], fullSplit_train[,1])
+```
+
+### Step 4 - Evaluating Model Performance
+
+```{note,eval=FALSE,echo=FALSE}
+Homework Notes: Explain the model's performance. Highlight key results.
+```
+
+We can again create predictions for our models and use confusion matrices to view how our models did. 
+
+```{r}
+small.tree.pred <- predict(small.tree.model, small_test)
+large.tree.pred <- predict(large.tree.model, fullSplit_test)
+```
+
+```{r}
+confusionMatrix(small.tree.pred, small_test$label)
+```
+
+```{r}
+confusionMatrix(large.tree.pred, fullSplit_test$label)
+```
+
+Immediately, we can see the accuracy of our models dropped in comparison to the previous KNN predictions. We got an accuracy of 75.9 for the small data and 86.33 for the large data. While this isn't too bad at all, it is definitely a downgrade. Something else to note is that, like our previous predictions, the accuracy for the large dataset is higher than the accuracy for the small data. This could simply be due to the fact that there is less data to train from, which leads to a worse model. 
+
+### Step 5 - Improving Model Performance
+
+```{note,eval=FALSE,echo=FALSE}
+Homework Notes: What options can be used to improve the model? Explain and show.
+```
+
+We can attempt to improve our models using a method called adaptive boosting. This is a process in which many decision trees are built and the trees vote on the best label for each example. The `C5.0` function takes as an optional parameter `trials`, which is used to determine the number of decision tree models built. According to the textbook, 10 trials has become the "de facto standard", so this is the first value we will try.
+
+```{r}
+small.tree.model.boost.10 <- C5.0(small_train[,-1], small_train[,1], trials = 10)
+large.tree.model.boost.10 <- C5.0(fullSplit_train[,-1], fullSplit_train[,1], trials = 10)
+```
+
+We can now create predictions and confusion matrices for our boosted models.
+
+```{r}
+small.tree.pred.boost.10 <- predict(small.tree.model.boost.10, small_test)
+large.tree.pred.boost.10 <- predict(large.tree.model.boost.10, fullSplit_test)
+```
+
+```{r}
+confusionMatrix(small.tree.pred.boost.10, small_test$label)
+```
+
+```{r}
+confusionMatrix(large.tree.pred.boost.10, fullSplit_test$label)
+```
+Right off the bat, we can see a drastic accuracy improvement through the utilization of adaptive boosting. We achieved an accuracy of 91.4 for the small data and 94.32 for the large data. The jump in accuracy was less for the large data. Therefore, we would like to see if simply increasing the number of trials will have any further significant effect on the models. 
+
+```{r}
+small.tree.model.boost.20 <- C5.0(small_train[,-1], small_train[,1], trials = 20)
+large.tree.model.boost.20 <- C5.0(fullSplit_train[,-1], fullSplit_train[,1], trials = 20)
+```
+
+Finally, we can create predictions and confusion matrices for these models with 20 trials. 
+
+```{r}
+small.tree.pred.boost.20 <- predict(small.tree.model.boost.20, small_test)
+large.tree.pred.boost.20 <- predict(large.tree.model.boost.20, fullSplit_test)
+```
+
+```{r}
+confusionMatrix(small.tree.pred.boost.20, small_test$label)
+```
+
+```{r}
+confusionMatrix(large.tree.pred.boost.20, fullSplit_test$label)
+```
+By increasing the number of trials, we were able to increase the accuracy, though not by much. We reached accuracies of 92 for the small data and 95.18 for the large data. While the increase is there, the time it took to produce these models doesn't seem worth the small increase in accuracy, especially when we have achieved higher accuracies using FNN. Regardless, these decision tree models performed very well. 
+
+## Ensemble Approach
+
+```{note,eval=FALSE,echo=FALSE}
+Homework Notes: Detail the algorithm and why you chose it.
+```
+
+For our ensemble approach, we are choosing to use to go with a random forest (also known a decision tree forest). This approach "combines the base principles of bagging with random feature selection to add additional diversity to the decision tree models" (Lantz 367). We chose to go with random forests for a couple of reasons. First, we previously looked at decision trees. As random forests are essentially many decision trees, it will be interesting to see how the two compare in terms of accuracy. Additionally, random forests are less likely to overfit the training data, which will be helpful for our Kaggle score. Finally, random forests work well with large datasets, which we have. 
+
+### Step 3 - Training A Model On The Data
+
+```{note,eval=FALSE,echo=FALSE}
+Homework Notes: Explain how to train the model.
+```
+
+To create our randomForest model, we will use the `randomForest` function from the `randomForest` package. The function takes in an `ntree` parameter, which determines how many decision trees are created. We will start off with a small forest (ntree = 10). Again, we will use the function on both the small and large datasets we created above. 
+
+```{r}
+library(randomForest)
+small.random.forest.model.10 <- randomForest(label ~ .,  data = small_train, ntree = 10)
+forest.model.10 <- randomForest(label ~ ., data = fullSplit_train, ntree = 10)
+```
+
+### Step 4 - Evaluating Model Performance
+
+```{note,eval=FALSE,echo=FALSE}
+Homework Notes: Explain the model's performance. Highlight key results.
+```
+
+Now, we can create predictions and confusion matrices like we did above.
+
+```{r}
+small.forest.preds.10 <- predict(small.random.forest.model.10, small_test)
+forest.preds.10 <- predict(forest.model.10, fullSplit_test)
+```
+
+```{r}
+confusionMatrix(small.forest.preds.10, small_test$label)
+```
+
+```{r}
+confusionMatrix(forest.preds.10, fullSplit_test$label)
+```
+Overall, the initial random forest models performed much better than the initial decision tree models. This makes sense, as random forests create multiple decision trees and use them to attempt to find the correct label. We got accuracies of 87.3 for the small data and 93.21 for the large data. Not too shabby. 
+
+### Step 5 - Improving Model Performance
+
+```{note,eval=FALSE,echo=FALSE}
+Homework Notes: What options can be used to improve the model? Explain and show.
+```
+
+To improve our random forest models, we will increase the number of trees that are created. The default value is 500, so this is what we'll use. 
+
+```{r}
+small.random.forest.model <- randomForest(label ~ .,  data = small_train, ntree = 500)
+forest.model <- randomForest(label ~ ., data = fullSplit_train, ntree = 500)
+```
+
+Finally, we can create predictions and confusion matrices.
+
+```{r}
+small.forest.preds <- predict(small.random.forest.model, small_test)
+forest.preds <- predict(forest.model, fullSplit_test)
+```
+
+```{r}
+confusionMatrix(small.forest.preds, small_test$label)
+```
+
+```{r}
+confusionMatrix(forest.preds, fullSplit_test$label)
+```
+
+Out of all the models we have created thus far, these random forest models have performed the best. The "large" random forest model beat out FNN, in terms of accuracy, by only 0.0004. However, it is important to note that FNN took much less time to run and produced almost identical results. 
+
+## Analysis of Approaches
+
+```{note,eval=FALSE,echo=FALSE}
+Homework Notes: Describe the algorithms you used and how you would rate them.
+```
+
+## Analysis of Kaggle Results
+
+```{note,eval=FALSE,echo=FALSE}
+Homework Notes: Describe your Kaggle results and working with the website.
+```
+
+```{r}
+final.preds.knn <- FNN::knn(train[,-1], test, cl = train$label, k=5)
+final.preds.tree <- C5.0(train[,-1], train[,1], trials = 20)
+final.preds.forest <- randomForest(label ~ ., data = train, ntree = 500)
+```
+
+```{r}
+final.preds.tree.values <- predict(final.preds.tree, test)
+final.preds.forest.values <- predict(final.preds.forest, test)
+```
+
+```{r}
+knn.final <- data.frame(ImageId = seq(1,28000), Label = final.preds.knn)
+tree.final <- data.frame(ImageId = seq(1,28000), Label = final.preds.tree.values)
+forest.final <- data.frame(ImageId = seq(1,28000), Label = final.preds.forest.values)
+```
+
+```{r}
+write.csv(knn.final, file = "knn_submit.csv", row.names = F)
+write.csv(tree.final, file = "tree_submit.csv", row.names = F)
+write.csv(forest.final, file = "forest_submit.csv", row.names = F)
+```
+
+## Conclusions
+
+```{note,eval=FALSE,echo=FALSE}
+Homework Notes: Write up your conclusions.
+```
